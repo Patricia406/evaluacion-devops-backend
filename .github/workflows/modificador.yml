@@ -1,0 +1,46 @@
+name: Modificador - GitHub Actions
+
+on:
+  workflow_dispatch:
+    inputs:
+      recurso:
+        description: 'Recurso Kubernetes'
+        required: true
+        default: 'backend'
+        type: string
+
+      driver:
+        description: 'Driver de base de datos'
+        required: true
+        default: 'postgres'
+        type: choice
+        options:
+          - postgres
+          - mysql
+          - mongo
+
+jobs:
+  modificar:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      - name: Mostrar parametros seleccionados
+        run: |
+          echo "Recurso seleccionado: ${{ inputs.recurso }}"
+          echo "Driver seleccionado: ${{ inputs.driver }}"
+
+      - name: Validar driver
+        shell: bash
+        run: |
+          case "${{ inputs.driver }}" in
+            postgres|mysql|mongo)
+              echo "Driver valido: ${{ inputs.driver }}"
+              ;;
+            *)
+              echo "Driver no valido"
+              exit 1
+              ;;
+          esac
