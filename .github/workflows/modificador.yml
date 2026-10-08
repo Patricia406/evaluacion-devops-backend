@@ -1,18 +1,18 @@
+
 name: Modificador - GitHub Actions
 
 on:
   workflow_dispatch:
     inputs:
       recurso:
-        description: 'Recurso Kubernetes'
+        description: "Deployment de Kubernetes"
         required: true
-        default: 'backend'
-        type: string
-
+        type: choice
+        options:
+          - backend
       driver:
-        description: 'Driver de base de datos'
+        description: "Base de datos"
         required: true
-        default: 'postgres'
         type: choice
         options:
           - postgres
@@ -21,26 +21,75 @@ on:
 
 jobs:
   modificar:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Windows, X64]
 
     steps:
-      - name: Descargar repositorio
-        uses: actions/checkout@v4
-
-      - name: Mostrar parametros seleccionados
+      - name: Verificar conexion con Kubernetes
+        shell: powershell
         run: |
-          echo "Recurso seleccionado: ${{ inputs.recurso }}"
-          echo "Driver seleccionado: ${{ inputs.driver }}"
+          kubectl cluster-info
+          if ($LASTEXITCODE -ne 0) {
+            throw "No se puede conectar a Kubernetes"
+          }
 
-      - name: Validar driver
-        shell: bash
+      - name: Cambiar base de datos
+        shell: powershell
+        env:
+          RECURSO: ${{ inputs.recurso }}
+          DRIVER: ${{ inputs.driver }}
         run: |
-          case "${{ inputs.driver }}" in
-            postgres|mysql|mongo)
-              echo "Driver valido: ${{ inputs.driver }}"
-              ;;
-            *)
-              echo "Driver no valido"
-              exit 1
-              ;;
-          esac
+          if ($env:RECURSO -ne "backend") {
+            throw "Recurso no permitido"
+          }
+
+          switch ($env:DRIVER) {
+            "postgres" {
+              $dbHost = "postgres-service"
+              $dbPort = "5432"
+            }
+            "mysql" {
+              $dbHost = "mysql-service"
+              $dbPort = "3306"
+            }
+            "mongo" {
+              $dbHost = "mongo-service"
+              $dbPort = "27017"
+            }
+            default {
+              throw "Driver no permitido"
+            }
+          }
+
+          kubectl set env deployment/backend -n evaluacion `
+            "MY_DATABASE_DRIVER=$env:DRIVER" `
+            "DB_HOST=$dbHost" `
+            "DB_PORT=$dbPort" `
+            "DB_NAME=backenddb"
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "No se pudo modificar el Deployment"
+          }
+
+          kubectl rollout status deployment/backend -n evaluacion --timeout=180s
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Fallo el despliegue"
+          }
+
+      - name: Verificar resultado
+        shell: powershell
+        env:
+          DRIVER: ${{ inputs.driver }}
+        run: |
+          $actual = kubectl get deployment backend -n evaluacion -o jsonpath="{.spec.template.spec.containers[0].env[?(@.name=='MY_DATABASE_DRIVER')].value}"
+
+          if ($LASTEXITCODE -ne 0 -or $actual -ne $env:DRIVER) {
+            throw "El driver no coincide con el solicitado"
+          }
+
+          Write-Host "Cambio exitoso. Driver activo: $actual"
+          kubectl get pods -n evaluacion
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Error al consultar los pods"
+          }
