@@ -1,0 +1,57 @@
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: localstack
+  namespace: evaluacion
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: localstack
+  template:
+    metadata:
+      labels:
+        app: localstack
+    spec:
+      containers:
+        - name: localstack
+          image: localstack/localstack:4.8.1
+          ports:
+            - containerPort: 4566
+          env:
+            - name: SERVICES
+              value: s3
+            - name: PERSISTENCE
+              value: "1"
+          volumeMounts:
+            - name: localstack-data
+              mountPath: /var/lib/localstack
+      volumes:
+        - name: localstack-data
+          persistentVolumeClaim:
+            claimName: localstack-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: localstack-data
+  namespace: evaluacion
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: localstack-service
+  namespace: evaluacion
+spec:
+  selector:
+    app: localstack
+  ports:
+    - port: 4566
+      targetPort: 4566

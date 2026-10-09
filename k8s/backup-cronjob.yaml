@@ -1,0 +1,42 @@
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: database-backup
+  namespace: evaluacion
+
+spec:
+  schedule: "0 */3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: Never
+
+          containers:
+            - name: backup
+              image: paty123/proyecto-backup:1.3
+              imagePullPolicy: IfNotPresent
+
+              envFrom:
+                - configMapRef:
+                    name: backend-config
+                - secretRef:
+                    name: backend-secret
+                - secretRef:
+                    name: backup-s3-credentials
+
+              env:
+                - name: S3_BUCKET
+                  value: "bucket-codigo-backup"
+
+                - name: APELLIDO_ALUMNO
+                  value: "RUIZ"
+
+                - name: AWS_ENDPOINT_URL
+                  value: "http://localstack-service:4566"
